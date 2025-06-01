@@ -4,7 +4,7 @@ import uvicorn
 import logging
 
 from config.settings import settings, setup_logging, validate_core_settings
-from routers.ux import router as ux_router
+from routers.ux_router import router as ux_router
 from database.client import supabase_manager
 
 # 로깅 설정

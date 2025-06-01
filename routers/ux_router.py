@@ -3,21 +3,73 @@ from typing import Optional, List, Dict, Any
 import logging
 
 from schemas.response import SimpleUXResponse
-from services.ux_service import ux_service
+from services.ux_service_agent import ux_service, smart_ux_service
 from database.client import is_supabase_connected
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ux", tags=["UX Service"])
 
+# =====================================
+# 🚀 통합된 UI 생성 엔드포인트
+# =====================================
+
+@router.get("/generate-ui", response_model=SimpleUXResponse)
+async def generate_ui(
+    page_type: str = Query(..., description="페이지 타입 (home, search, products)"),
+    user_query: Optional[str] = Query(None, description="사용자 검색 쿼리 (search 페이지용)")
+):
+    """🚀 스마트 AI Agent 기반 UI 생성 (완전 자동화)"""
+    try:
+        # 🤖 AI Agent 방식으로 통합
+        if user_query and page_type == 'search':
+            # 사용자 쿼리가 있으면 AI Agent 사용
+            response = await smart_ux_service.generate_smart_ui(user_query)
+        else:
+            # 일반 페이지는 기존 방식 유지 (하지만 개선됨)
+            response = await ux_service.generate_dynamic_ui(
+                page_type=page_type,
+                user_context=None,
+                custom_requirements=user_query
+            )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ 스마트 UI 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"UI 생성 실패: {str(e)}")
+
+@router.get("/generate-ui-smart", response_model=SimpleUXResponse)
+async def generate_smart_ui(
+    query: str = Query(..., description="사용자 요청 (예: '20대에게 추천하는 보험')")
+):
+    """
+    🤖 AI Agent 기반 스마트 UI 생성
+    
+    - AI가 사용자 요청을 분석
+    - 적절한 Tool을 사용해 DB에서 맞는 데이터만 검색  
+    - 검색 결과로 맞춤형 UI 생성
+    """
+    try:
+        # AI Agent로 UI 생성
+        response = await smart_ux_service.generate_smart_ui(query)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ 스마트 AI UI 생성 실패: {e}")
+        import traceback
+        logger.error(f"❌ 라우터 스택 트레이스: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"스마트 AI UI 생성 실패: {str(e)}")
+
 @router.post("/generate-ui", response_model=SimpleUXResponse)
-async def generate_dynamic_ui(
+async def generate_dynamic_ui_post(
     page_type: str,
     user_id: Optional[str] = None,
     product_id: Optional[str] = None,
     custom_requirements: Optional[str] = None
 ):
-    """동적 UI 생성 - 핵심 기능"""
+    """동적 UI 생성 - POST 방식 (레거시 호환)"""
     try:
         user_context = {}
         if user_id:
@@ -31,12 +83,15 @@ async def generate_dynamic_ui(
             custom_requirements=custom_requirements
         )
         
-        logger.info(f"UI 생성 완료: {page_type}")
         return result
         
     except Exception as e:
         logger.error(f"UI 생성 실패: {e}")
         raise HTTPException(status_code=500, detail=f"UI 생성 중 오류: {str(e)}")
+
+# =====================================
+# 🔍 검색 및 데이터 조회 엔드포인트
+# =====================================
 
 @router.get("/search")
 async def search_insurance_content(
@@ -58,8 +113,6 @@ async def search_insurance_content(
             include_faqs=include_faqs,
             include_testimonials=include_testimonials
         )
-        
-        logger.info(f"검색 완료: '{q}' - {len(search_results.get('products', []))} 상품, {len(search_results.get('faqs', []))} FAQ")
         
         return {
             "success": True,
@@ -140,6 +193,10 @@ async def get_testimonials(
         logger.error(f"고객 후기 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# =====================================
+# 🔧 시스템 관리 엔드포인트
+# =====================================
+
 @router.get("/health")
 async def health_check():
     """서비스 상태 확인"""
@@ -151,11 +208,13 @@ async def health_check():
             "ai_available": ux_service.ai_available,
             "endpoints": [
                 "/generate-ui",
+                "/generate-ui-smart",
                 "/search",
                 "/products", 
                 "/categories",
                 "/faqs",
-                "/testimonials"
+                "/testimonials",
+                "/health"
             ]
         }
     except Exception as e:
